@@ -1,177 +1,94 @@
 # ngx_http_auth_internal_module
 
-# Name
+`ngx_http_auth_internal_module` validates an internal authentication fingerprint header.
 
-This Nginx module provides internal request authentication by validating a custom HTTP header (default is X-Fingerprint) against a set of predefined secrets. The module is highly configurable and allows flexible integration into existing systems for enhanced security.
-
-* Validates an X-Fingerprint HTTP header against a preconfigured list of secrets.
-* Supports multiple secrets for flexible configuration.
-* Configurable behavior for missing, invalid or expired time.
-
-# Table of Content
-
-- [ngx\_http\_auth\_internal\_module](#ngx_http_auth_internal_module)
-- [Name](#name)
-- [Table of Content](#table-of-content)
-- [Status](#status)
-- [Synopsis](#synopsis)
-- [Installation](#installation)
-- [Directives](#directives)
-  - [auth\_internal](#auth_internal)
-  - [auth\_internal\_request\_secrets](#auth_internal_request_secrets)
-  - [auth\_internal\_proxy\_secret](#auth_internal_proxy_secret)
-  - [auth\_internal\_empty\_deny](#auth_internal_empty_deny)
-  - [auth\_internal\_failure\_deny](#auth_internal_failure_deny)
-  - [internal\_request\_auth\_timeout](#internal_request_auth_timeout)
-  - [internal\_request\_auth\_header](#internal_request_auth_header)
-- [Variables](#variables)
-  - [$auth\_internal\_result](#auth_internal_result)
-  - [$auth\_internal\_proxy\_fingerprint](#auth_internal_proxy_fingerprint)
-- [Author](#author)
-- [License](#license)
-
-# Status
-
-This Nginx module is currently considered experimental. Issues and PRs are welcome if you encounter any problems.
-
-# Synopsis
+## Synopsis
 
 ```nginx
 http {
     auth_internal on;
-    auth_internal_request_secret secret1 secret2;
+    auth_internal_secrets secret1 secret2;
     auth_internal_timeout 600;
     auth_internal_header X-Fingerprint;
     auth_internal_empty_deny off;
     auth_internal_failure_deny on;
-    auth_internal_proxy_secret secret1;
-
-    server {
-        listen 80;
-
-        location / {
-            proxy_set_header X-Fingerprint $auth_internal_proxy_fingerprint;
-            proxy_pass http://upstream_server;
-        }
-    }
 }
 ```
 
-# Installation
+## Installation
 
-To use theses modules, configure your nginx branch with `--add-module=/path/to/ngx_http_access_control_module`.
-
-# Directives
-
-## auth_internal
-
-**Syntax:** *auth_internal on | off;*
-
-**Default:** *auth_internal off;*
-
-**Context:** *http, server*
-
-Enable or disable the internal authentication.
-
-## auth_internal_request_secrets
-
-**Syntax:** *auth_internal_request_secrets secret1 \[secret2 ...\];*
-
-**Default:** *-;*
-
-**Context:** *http, server*
-
-Specifies one or more secrets used to validate the header. A maximum of three secrets are allowed.
-
-## auth_internal_proxy_secret
-
-**Syntax:** *auth_internal_proxy_secrets secret;*
-
-**Default:** *-;*
-
-**Context:** *http, server*
-
-Specifies the secret used to gerenate a new value of fingerprint validation header. The fingerprint value will be appended to the variable `$auth_internal_proxy_fingerprint`, which can be used to append to upstream request headers to enable auth by upstream server.
-
-For example, with the following configuration
-```
-server {
-    listen 80;
-    auth_internal_proxy_secrets test_secret;
-    ...
-
-    location / {
-        ...
-        proxy_set_header X-Fingerprint $auth_internal_proxy_fingerprint;
-        proxy_pass http://upstream_server;
-    }
-}
+```sh
+./configure --add-module=/path/to/ngx_http_auth_internal_module
 ```
 
-## auth_internal_empty_deny
+## Directives
 
-**Syntax:** *auth_internal_empty_deny on | off;*
+### auth_internal
 
-**Default:** *auth_internal_empty_deny off;*
+**Syntax:** `auth_internal on | off;`
 
-**Context:** *http, server*
+**Default:** `auth_internal off;`
 
-Determines whether to deny requests missing the header. If set to `on`, missing headers result in a deny status.
+**Context:** `http`, `server`
 
-## auth_internal_failure_deny
+Enables or disables internal fingerprint validation.
 
-**Syntax:** *auth_internal_failure_deny on | off;*
+### auth_internal_secrets
 
-**Default:** *auth_internal_failure_deny on;*
+**Syntax:** `auth_internal_secrets secret ...;`
 
-**Context:** *http, server*
+**Default:** `-`
 
-Determines whether to deny requests when fingerprint validation fails. If set to `on, invalid fingerprints result in a deny status.
+**Context:** `http`, `server`
 
-## internal_request_auth_timeout
+Configures one or more secrets used to validate the fingerprint header.
 
-**Syntax:** *auth_internal_failure_deny on | off;*
+### auth_internal_empty_deny
 
-**Default:** *auth_internal_failure_deny on;*
+**Syntax:** `auth_internal_empty_deny on | off;`
 
-**Context:** *http, server*
+**Default:** `auth_internal_empty_deny off;`
 
-Specifies the maximum allowed age of a timestamp (in seconds) in the header. Requests with timestamps exceeding this value are denied. Only valid when `auth_internal_failure_deny` is set to `on`.
+**Context:** `http`, `server`
 
-## internal_request_auth_header
+When enabled, requests without the fingerprint header are rejected.
 
-**Syntax:** *internal_request_auth_header header_name;*
+### auth_internal_failure_deny
 
-**Default:** *internal_request_auth_header X-Fingerprint;*
+**Syntax:** `auth_internal_failure_deny on | off;`
 
-**Context:** *http, server*
+**Default:** `auth_internal_failure_deny on;`
 
-Specifies the name of the HTTP header used for fingerprint validation.
+**Context:** `http`, `server`
 
-# Variables
+When enabled, invalid or expired fingerprints are rejected.
 
-## \$auth_internal_result
+### auth_internal_timeout
 
-Indicates the result of the internal authentication process.
+**Syntax:** `auth_internal_timeout time;`
 
-Possible Values:
-* off: Authentication is disabled (internal_request_auth is off).
-* empty: The fingerprint header is missing.
-* failure: Authentication failed due to an invalid timestamp, hash mismatch, or other errors.
-* success: Authentication succeeded.
+**Default:** `auth_internal_timeout 300s;`
 
-## \$auth_internal_proxy_fingerprint
+**Context:** `http`, `server`
 
-Generates a new fingerprint based on the current server time and the configured secrets.
+Sets the maximum allowed fingerprint age.
 
-Format: <8-character imestamp><32-character MD5 hash>
-The first 8 characters are a hexadecimal UNIX timestamp.
-The last 32 characters are the MD5 hash of the secret concatenated with the timestamp.
+### auth_internal_header
 
-# Author
+**Syntax:** `auth_internal_header header;`
 
-Hanada im@hanada.info
+**Default:** `auth_internal_header X-Fingerprint;`
 
-# License
+**Context:** `http`, `server`
+
+Sets the request header used for fingerprint validation.
+
+## Variables
+
+### $auth_internal_result
+
+Contains the validation result, such as `off`, `empty`, `failure`, or `success`.
+
+## License
 
 This Nginx module is licensed under [BSD 2-Clause License](LICENSE).
