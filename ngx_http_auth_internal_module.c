@@ -50,7 +50,7 @@ static ngx_command_t  ngx_http_auth_internal_commands[] = {
       offsetof(ngx_http_auth_internal_srv_conf_t, enable),
       NULL },
 
-    { ngx_string("auth_internal_secrets"),
+    { ngx_string("auth_internal_secret"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_CONF_1MORE,
       ngx_conf_set_str_array_slot,
       NGX_HTTP_SRV_CONF_OFFSET,
