@@ -7,7 +7,8 @@
 ```nginx
 http {
     auth_internal on;
-    auth_internal_secrets secret1 secret2;
+    auth_internal_secret secret1;
+    auth_internal_secret secret2;
     auth_internal_timeout 600;
     auth_internal_header X-Fingerprint;
     auth_internal_empty_deny off;
@@ -33,15 +34,16 @@ http {
 
 Enables or disables internal fingerprint validation.
 
-### auth_internal_secrets
+### auth_internal_secret
 
-**Syntax:** `auth_internal_secrets secret ...;`
+**Syntax:** `auth_internal_secret secret;`
 
 **Default:** `-`
 
 **Context:** `http`, `server`
 
-Configures one or more secrets used to validate the fingerprint header.
+Configures a secret used to validate the fingerprint header. This directive
+can be specified multiple times to support secret rotation.
 
 ### auth_internal_empty_deny
 
