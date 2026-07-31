@@ -22,66 +22,98 @@ http {
 ./configure --add-module=/path/to/ngx_http_auth_internal_module
 ```
 
+To enable `condition` and `when`, build `ngx_condition_module` statically in
+the same Nginx configuration:
+
+```sh
+./configure \
+    --add-module=/path/to/ngx_condition_module \
+    --add-module=/path/to/ngx_http_auth_internal_module
+```
+
+## Conditional configuration
+
+All module directives support `http` and `server`. When
+[`ngx_condition_module`](https://git.hanada.info/hanada/ngx_condition_module)
+is built into Nginx, they also support `when` in those contexts:
+
+```nginx
+condition internal_auth_enabled str_eq $host internal.example.com;
+
+when internal_auth_enabled {
+    auth_internal on;
+    auth_internal_secret internal_secret;
+    auth_internal_timeout 60s;
+}
+
+auth_internal off;
+```
+
+Every directive selects its value independently. Multiple
+`auth_internal_secret` directives associated with the same `when` form one
+secret set. The first matching value is used, including unconditional values,
+so put an unconditional fallback after conditional values.
+
 ## Directives
 
 ### auth_internal
 
-**Syntax:** `auth_internal on | off;`
+**syntax:** `auth_internal on | off`
 
-**Default:** `auth_internal off;`
+**default:** `auth_internal off`
 
-**Context:** `http`, `server`
+**context:** `http`, `server`, `when`
 
 Enables or disables internal fingerprint validation.
 
 ### auth_internal_secret
 
-**Syntax:** `auth_internal_secret secret;`
+**syntax:** `auth_internal_secret secret`
 
-**Default:** `-`
+**default:** none
 
-**Context:** `http`, `server`
+**context:** `http`, `server`, `when`
 
 Configures a secret used to validate the fingerprint header. This directive
 can be specified multiple times to support secret rotation.
 
 ### auth_internal_empty_deny
 
-**Syntax:** `auth_internal_empty_deny on | off;`
+**syntax:** `auth_internal_empty_deny on | off`
 
-**Default:** `auth_internal_empty_deny off;`
+**default:** `auth_internal_empty_deny off`
 
-**Context:** `http`, `server`
+**context:** `http`, `server`, `when`
 
 When enabled, requests without the fingerprint header are rejected.
 
 ### auth_internal_failure_deny
 
-**Syntax:** `auth_internal_failure_deny on | off;`
+**syntax:** `auth_internal_failure_deny on | off`
 
-**Default:** `auth_internal_failure_deny on;`
+**default:** `auth_internal_failure_deny on`
 
-**Context:** `http`, `server`
+**context:** `http`, `server`, `when`
 
 When enabled, invalid or expired fingerprints are rejected.
 
 ### auth_internal_timeout
 
-**Syntax:** `auth_internal_timeout time;`
+**syntax:** `auth_internal_timeout time`
 
-**Default:** `auth_internal_timeout 300s;`
+**default:** `auth_internal_timeout 300s`
 
-**Context:** `http`, `server`
+**context:** `http`, `server`, `when`
 
 Sets the maximum allowed fingerprint age.
 
 ### auth_internal_header
 
-**Syntax:** `auth_internal_header header;`
+**syntax:** `auth_internal_header header`
 
-**Default:** `auth_internal_header X-Fingerprint;`
+**default:** `auth_internal_header X-Fingerprint`
 
-**Context:** `http`, `server`
+**context:** `http`, `server`, `when`
 
 Sets the request header used for fingerprint validation.
 

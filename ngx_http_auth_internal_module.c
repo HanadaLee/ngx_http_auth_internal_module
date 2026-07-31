@@ -9,6 +9,10 @@
 #include <ngx_http.h>
 #include <ngx_md5.h>
 
+#if (NGX_CONDITION)
+#include <ngx_http_condition_module.h>
+#endif
+
 
 typedef struct {
     ngx_str_t      result;
@@ -16,12 +20,21 @@ typedef struct {
 
 
 typedef struct {
+#if (NGX_CONDITION)
+    ngx_array_t   *enable;
+    ngx_array_t   *secrets;
+    ngx_array_t   *empty_deny;
+    ngx_array_t   *failure_deny;
+    ngx_array_t   *timeout;
+    ngx_array_t   *header_name;
+#else
     ngx_flag_t     enable;
     ngx_array_t   *secrets;
     ngx_flag_t     empty_deny;
     ngx_flag_t     failure_deny;
     time_t         timeout;
     ngx_str_t      header_name;
+#endif
 } ngx_http_auth_internal_srv_conf_t;
 
 
@@ -44,43 +57,91 @@ static ngx_int_t ngx_http_auth_internal_init(ngx_conf_t *cf);
 static ngx_command_t  ngx_http_auth_internal_commands[] = {
 
     { ngx_string("auth_internal"),
-      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_CONF_FLAG,
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF
+#if (NGX_CONDITION)
+                        |NGX_HTTP_MAIN_WHEN_CONF|NGX_HTTP_SRV_WHEN_CONF
+#endif
+                        |NGX_CONF_FLAG,
+#if (NGX_CONDITION)
+      ngx_conf_set_conditional_flag_slot,
+#else
       ngx_conf_set_flag_slot,
+#endif
       NGX_HTTP_SRV_CONF_OFFSET,
       offsetof(ngx_http_auth_internal_srv_conf_t, enable),
       NULL },
 
     { ngx_string("auth_internal_secret"),
-      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_CONF_TAKE1,
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF
+#if (NGX_CONDITION)
+                        |NGX_HTTP_MAIN_WHEN_CONF|NGX_HTTP_SRV_WHEN_CONF
+#endif
+                        |NGX_CONF_TAKE1,
+#if (NGX_CONDITION)
+      ngx_conf_set_conditional_str_array_slot,
+#else
       ngx_conf_set_str_array_slot,
+#endif
       NGX_HTTP_SRV_CONF_OFFSET,
       offsetof(ngx_http_auth_internal_srv_conf_t, secrets),
       NULL },
 
     { ngx_string("auth_internal_empty_deny"),
-      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_CONF_FLAG,
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF
+#if (NGX_CONDITION)
+                        |NGX_HTTP_MAIN_WHEN_CONF|NGX_HTTP_SRV_WHEN_CONF
+#endif
+                        |NGX_CONF_FLAG,
+#if (NGX_CONDITION)
+      ngx_conf_set_conditional_flag_slot,
+#else
       ngx_conf_set_flag_slot,
+#endif
       NGX_HTTP_SRV_CONF_OFFSET,
       offsetof(ngx_http_auth_internal_srv_conf_t, empty_deny),
       NULL },
 
     { ngx_string("auth_internal_failure_deny"),
-      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_CONF_FLAG,
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF
+#if (NGX_CONDITION)
+                        |NGX_HTTP_MAIN_WHEN_CONF|NGX_HTTP_SRV_WHEN_CONF
+#endif
+                        |NGX_CONF_FLAG,
+#if (NGX_CONDITION)
+      ngx_conf_set_conditional_flag_slot,
+#else
       ngx_conf_set_flag_slot,
+#endif
       NGX_HTTP_SRV_CONF_OFFSET,
       offsetof(ngx_http_auth_internal_srv_conf_t, failure_deny),
       NULL },
 
     { ngx_string("auth_internal_timeout"),
-      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_CONF_TAKE1,
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF
+#if (NGX_CONDITION)
+                        |NGX_HTTP_MAIN_WHEN_CONF|NGX_HTTP_SRV_WHEN_CONF
+#endif
+                        |NGX_CONF_TAKE1,
+#if (NGX_CONDITION)
+      ngx_conf_set_conditional_sec_slot,
+#else
       ngx_conf_set_sec_slot,
+#endif
       NGX_HTTP_SRV_CONF_OFFSET,
       offsetof(ngx_http_auth_internal_srv_conf_t, timeout),
       NULL },
 
     { ngx_string("auth_internal_header"),
-      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF|NGX_CONF_TAKE1,
+      NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF
+#if (NGX_CONDITION)
+                        |NGX_HTTP_MAIN_WHEN_CONF|NGX_HTTP_SRV_WHEN_CONF
+#endif
+                        |NGX_CONF_TAKE1,
+#if (NGX_CONDITION)
+      ngx_conf_set_conditional_str_slot,
+#else
       ngx_conf_set_str_slot,
+#endif
       NGX_HTTP_SRV_CONF_OFFSET,
       offsetof(ngx_http_auth_internal_srv_conf_t, header_name),
       NULL },
@@ -259,10 +320,14 @@ static ngx_int_t
 ngx_http_auth_internal_handler(ngx_http_request_t *r)
 {
     time_t                             timestamp, current_time;
+    time_t                             timeout;
+    ngx_flag_t                         empty_deny, enable, failure_deny;
     ngx_uint_t                         i;
     ngx_str_t                          fingerprint, md5sum, computed_md5;
     ngx_str_t                          data;
+    ngx_str_t                         *header_name;
     ngx_str_t                         *secret;
+    ngx_array_t                       *secrets;
     ngx_table_elt_t                   *h;
     ngx_http_auth_internal_ctx_t      *ctx;
     ngx_http_auth_internal_srv_conf_t *conf;
@@ -271,6 +336,12 @@ ngx_http_auth_internal_handler(ngx_http_request_t *r)
 
     conf = ngx_http_get_module_srv_conf(r, ngx_http_auth_internal_module);
     ctx = ngx_http_get_module_ctx(r, ngx_http_auth_internal_module);
+
+#if (NGX_CONDITION)
+    enable = ngx_http_get_conditional_flag_value(r, conf->enable);
+#else
+    enable = conf->enable;
+#endif
 
     if (ctx == NULL) {
         ctx = ngx_pcalloc(r->pool, sizeof(ngx_http_auth_internal_ctx_t));
@@ -281,17 +352,33 @@ ngx_http_auth_internal_handler(ngx_http_request_t *r)
         ngx_http_set_ctx(r, ctx, ngx_http_auth_internal_module);
     }
 
-    if (!conf->enable) {
+    if (!enable) {
         ctx->result = ngx_http_auth_internal_result_off;
         return NGX_DECLINED;
     }
 
-    h = ngx_http_auth_internal_get_header(r, &conf->header_name);
+#if (NGX_CONDITION)
+    secrets = ngx_http_get_conditional_str_array_value(r, conf->secrets);
+    empty_deny =
+        ngx_http_get_conditional_flag_value(r, conf->empty_deny);
+    failure_deny =
+        ngx_http_get_conditional_flag_value(r, conf->failure_deny);
+    timeout = ngx_http_get_conditional_sec_value(r, conf->timeout);
+    header_name = ngx_http_get_conditional_str_value(r, conf->header_name);
+#else
+    secrets = conf->secrets;
+    empty_deny = conf->empty_deny;
+    failure_deny = conf->failure_deny;
+    timeout = conf->timeout;
+    header_name = &conf->header_name;
+#endif
+
+    h = ngx_http_auth_internal_get_header(r, header_name);
     if (h == NULL) {
         ctx->result = ngx_http_auth_internal_result_empty;
         return ngx_http_auth_internal_deny(r,
             "auth internal: denied access due to empty fingerprint",
-            conf->empty_deny);
+            empty_deny);
     }
 
     fingerprint = h->value;
@@ -299,7 +386,7 @@ ngx_http_auth_internal_handler(ngx_http_request_t *r)
         ctx->result = ngx_http_auth_internal_result_failure;
         return ngx_http_auth_internal_deny(r,
             "auth internal: denied access due to invalid fingerprint format",
-            conf->failure_deny);
+            failure_deny);
     }
 
     ngx_memcpy(timestamp_hex, fingerprint.data, 8);
@@ -315,34 +402,34 @@ ngx_http_auth_internal_handler(ngx_http_request_t *r)
         ctx->result = ngx_http_auth_internal_result_failure;
         return ngx_http_auth_internal_deny(r,
             "auth internal: denied access due to invalid fingerprint timestamp",
-            conf->failure_deny);
+            failure_deny);
     }
 
     current_time = ngx_time();
-    if ((current_time - timestamp) > conf->timeout) {
+    if ((current_time - timestamp) > timeout) {
         ctx->result = ngx_http_auth_internal_result_failure;
         return ngx_http_auth_internal_deny(r,
             "auth internal: denied access due to fingerprint timeout",
-            conf->failure_deny);
+            failure_deny);
     }
 
-    if (conf->secrets == NULL || conf->secrets->nelts == 0) {
+    if (secrets == NULL || secrets->nelts == 0) {
         ngx_log_error(NGX_LOG_WARN, r->connection->log, 0,
                       "auth internal: skipped due to secrets not configured");
         ctx->result = ngx_http_auth_internal_result_secrets_not_configured;
         return NGX_DECLINED;
     }
 
-    secret = conf->secrets->elts;
+    secret = secrets->elts;
 
-    for (i = 0; i < conf->secrets->nelts; i++) {
+    for (i = 0; i < secrets->nelts; i++) {
         data.len = secret[i].len + 8;
         data.data = ngx_pnalloc(r->pool, data.len);
         if (data.data == NULL) {
             ctx->result = ngx_http_auth_internal_result_failure;
             return ngx_http_auth_internal_deny(r,
                 "auth internal: failed to allocate memory",
-                conf->failure_deny);
+                failure_deny);
         }
 
         ngx_memcpy(data.data, secret[i].data, secret[i].len);
@@ -354,7 +441,7 @@ ngx_http_auth_internal_handler(ngx_http_request_t *r)
             ctx->result = ngx_http_auth_internal_result_failure;
             return ngx_http_auth_internal_deny(r,
                 "auth internal: denied access due to empty fingerprint hash",
-                conf->failure_deny);
+                failure_deny);
         }
 
         if (computed_md5.len == md5sum.len
@@ -368,7 +455,7 @@ ngx_http_auth_internal_handler(ngx_http_request_t *r)
     ctx->result = ngx_http_auth_internal_result_failure;
     return ngx_http_auth_internal_deny(r,
         "auth internal: denied access due to fingerprint hash mismatch",
-        conf->failure_deny);
+        failure_deny);
 }
 
 
@@ -382,11 +469,20 @@ ngx_http_auth_internal_create_srv_conf(ngx_conf_t *cf)
         return NULL;
     }
 
+#if (NGX_CONDITION)
+    conf->enable = NGX_CONF_UNSET_PTR;
+    conf->secrets = NGX_CONF_UNSET_PTR;
+    conf->empty_deny = NGX_CONF_UNSET_PTR;
+    conf->failure_deny = NGX_CONF_UNSET_PTR;
+    conf->timeout = NGX_CONF_UNSET_PTR;
+    conf->header_name = NGX_CONF_UNSET_PTR;
+#else
     conf->enable = NGX_CONF_UNSET;
     conf->secrets = NGX_CONF_UNSET_PTR;
     conf->empty_deny = NGX_CONF_UNSET;
     conf->failure_deny = NGX_CONF_UNSET;
     conf->timeout = NGX_CONF_UNSET;
+#endif
 
     return conf;
 }
@@ -399,6 +495,32 @@ ngx_http_auth_internal_merge_srv_conf(ngx_conf_t *cf, void *parent,
     ngx_http_auth_internal_srv_conf_t  *prev = parent;
     ngx_http_auth_internal_srv_conf_t  *conf = child;
 
+#if (NGX_CONDITION)
+    ngx_str_t  header_name = ngx_string("X-Fingerprint");
+
+    if (ngx_conf_merge_conditional_flag_value(cf, &conf->enable, prev->enable,
+                                              0)
+        != NGX_OK
+        || ngx_conf_merge_conditional_ptr_value(cf, &conf->secrets,
+                                                prev->secrets, NULL)
+           != NGX_OK
+        || ngx_conf_merge_conditional_flag_value(cf, &conf->empty_deny,
+                                                 prev->empty_deny, 0)
+           != NGX_OK
+        || ngx_conf_merge_conditional_flag_value(cf, &conf->failure_deny,
+                                                 prev->failure_deny, 1)
+           != NGX_OK
+        || ngx_conf_merge_conditional_sec_value(cf, &conf->timeout,
+                                                prev->timeout, 300)
+           != NGX_OK
+        || ngx_conf_merge_conditional_str_value(cf, &conf->header_name,
+                                                prev->header_name,
+                                                header_name)
+           != NGX_OK)
+    {
+        return NGX_CONF_ERROR;
+    }
+#else
     ngx_conf_merge_value(conf->enable, prev->enable, 0);
     ngx_conf_merge_ptr_value(conf->secrets, prev->secrets, NULL);
     ngx_conf_merge_value(conf->empty_deny, prev->empty_deny, 0);
@@ -406,6 +528,7 @@ ngx_http_auth_internal_merge_srv_conf(ngx_conf_t *cf, void *parent,
     ngx_conf_merge_value(conf->timeout, prev->timeout, 300);
     ngx_conf_merge_str_value(conf->header_name, prev->header_name,
                              "X-Fingerprint");
+#endif
 
     return NGX_CONF_OK;
 }
