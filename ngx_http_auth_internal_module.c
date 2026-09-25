@@ -9,8 +9,8 @@
 #include <ngx_http.h>
 #include <ngx_md5.h>
 
-#if (NGX_CONDITION)
-#include <ngx_http_condition_module.h>
+#if (NGX_EXPR)
+#include <ngx_http_expr_module.h>
 #endif
 
 
@@ -20,7 +20,7 @@ typedef struct {
 
 
 typedef struct {
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
     ngx_array_t   *enable;
     ngx_array_t   *secrets;
     ngx_array_t   *empty_deny;
@@ -58,11 +58,11 @@ static ngx_command_t  ngx_http_auth_internal_commands[] = {
 
     { ngx_string("auth_internal"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
                         |NGX_HTTP_MAIN_WHEN_CONF|NGX_HTTP_SRV_WHEN_CONF
 #endif
                         |NGX_CONF_FLAG,
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
       ngx_conf_set_conditional_flag_slot,
 #else
       ngx_conf_set_flag_slot,
@@ -73,11 +73,11 @@ static ngx_command_t  ngx_http_auth_internal_commands[] = {
 
     { ngx_string("auth_internal_secret"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
                         |NGX_HTTP_MAIN_WHEN_CONF|NGX_HTTP_SRV_WHEN_CONF
 #endif
                         |NGX_CONF_TAKE1,
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
       ngx_conf_set_conditional_str_array_slot,
 #else
       ngx_conf_set_str_array_slot,
@@ -88,11 +88,11 @@ static ngx_command_t  ngx_http_auth_internal_commands[] = {
 
     { ngx_string("auth_internal_empty_deny"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
                         |NGX_HTTP_MAIN_WHEN_CONF|NGX_HTTP_SRV_WHEN_CONF
 #endif
                         |NGX_CONF_FLAG,
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
       ngx_conf_set_conditional_flag_slot,
 #else
       ngx_conf_set_flag_slot,
@@ -103,11 +103,11 @@ static ngx_command_t  ngx_http_auth_internal_commands[] = {
 
     { ngx_string("auth_internal_failure_deny"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
                         |NGX_HTTP_MAIN_WHEN_CONF|NGX_HTTP_SRV_WHEN_CONF
 #endif
                         |NGX_CONF_FLAG,
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
       ngx_conf_set_conditional_flag_slot,
 #else
       ngx_conf_set_flag_slot,
@@ -118,11 +118,11 @@ static ngx_command_t  ngx_http_auth_internal_commands[] = {
 
     { ngx_string("auth_internal_timeout"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
                         |NGX_HTTP_MAIN_WHEN_CONF|NGX_HTTP_SRV_WHEN_CONF
 #endif
                         |NGX_CONF_TAKE1,
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
       ngx_conf_set_conditional_sec_slot,
 #else
       ngx_conf_set_sec_slot,
@@ -133,11 +133,11 @@ static ngx_command_t  ngx_http_auth_internal_commands[] = {
 
     { ngx_string("auth_internal_header"),
       NGX_HTTP_MAIN_CONF|NGX_HTTP_SRV_CONF
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
                         |NGX_HTTP_MAIN_WHEN_CONF|NGX_HTTP_SRV_WHEN_CONF
 #endif
                         |NGX_CONF_TAKE1,
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
       ngx_conf_set_conditional_str_slot,
 #else
       ngx_conf_set_str_slot,
@@ -337,8 +337,8 @@ ngx_http_auth_internal_handler(ngx_http_request_t *r)
     conf = ngx_http_get_module_srv_conf(r, ngx_http_auth_internal_module);
     ctx = ngx_http_get_module_ctx(r, ngx_http_auth_internal_module);
 
-#if (NGX_CONDITION)
-    enable = ngx_http_get_conditional_flag_value(r, conf->enable);
+#if (NGX_EXPR)
+    enable = ngx_http_get_expr_flag_value(r, conf->enable);
 #else
     enable = conf->enable;
 #endif
@@ -357,14 +357,14 @@ ngx_http_auth_internal_handler(ngx_http_request_t *r)
         return NGX_DECLINED;
     }
 
-#if (NGX_CONDITION)
-    secrets = ngx_http_get_conditional_str_array_value(r, conf->secrets);
+#if (NGX_EXPR)
+    secrets = ngx_http_get_expr_str_array_value(r, conf->secrets);
     empty_deny =
-        ngx_http_get_conditional_flag_value(r, conf->empty_deny);
+        ngx_http_get_expr_flag_value(r, conf->empty_deny);
     failure_deny =
-        ngx_http_get_conditional_flag_value(r, conf->failure_deny);
-    timeout = ngx_http_get_conditional_sec_value(r, conf->timeout);
-    header_name = ngx_http_get_conditional_str_value(r, conf->header_name);
+        ngx_http_get_expr_flag_value(r, conf->failure_deny);
+    timeout = ngx_http_get_expr_sec_value(r, conf->timeout);
+    header_name = ngx_http_get_expr_str_value(r, conf->header_name);
 #else
     secrets = conf->secrets;
     empty_deny = conf->empty_deny;
@@ -469,7 +469,7 @@ ngx_http_auth_internal_create_srv_conf(ngx_conf_t *cf)
         return NULL;
     }
 
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
     conf->enable = NGX_CONF_UNSET_PTR;
     conf->secrets = NGX_CONF_UNSET_PTR;
     conf->empty_deny = NGX_CONF_UNSET_PTR;
@@ -495,27 +495,25 @@ ngx_http_auth_internal_merge_srv_conf(ngx_conf_t *cf, void *parent,
     ngx_http_auth_internal_srv_conf_t  *prev = parent;
     ngx_http_auth_internal_srv_conf_t  *conf = child;
 
-#if (NGX_CONDITION)
+#if (NGX_EXPR)
     ngx_str_t  header_name = ngx_string("X-Fingerprint");
 
-    if (ngx_conf_merge_conditional_flag_value(cf, &conf->enable, prev->enable,
-                                              0)
+    if (ngx_conf_merge_expr_flag_value(cf, &conf->enable, prev->enable, 0)
         != NGX_OK
-        || ngx_conf_merge_conditional_ptr_value(cf, &conf->secrets,
-                                                prev->secrets, NULL)
+        || ngx_conf_merge_expr_ptr_value(cf, &conf->secrets,
+                                         prev->secrets, NULL)
            != NGX_OK
-        || ngx_conf_merge_conditional_flag_value(cf, &conf->empty_deny,
-                                                 prev->empty_deny, 0)
+        || ngx_conf_merge_expr_flag_value(cf, &conf->empty_deny,
+                                          prev->empty_deny, 0)
            != NGX_OK
-        || ngx_conf_merge_conditional_flag_value(cf, &conf->failure_deny,
-                                                 prev->failure_deny, 1)
+        || ngx_conf_merge_expr_flag_value(cf, &conf->failure_deny,
+                                          prev->failure_deny, 1)
            != NGX_OK
-        || ngx_conf_merge_conditional_sec_value(cf, &conf->timeout,
-                                                prev->timeout, 300)
+        || ngx_conf_merge_expr_sec_value(cf, &conf->timeout, prev->timeout, 300)
            != NGX_OK
-        || ngx_conf_merge_conditional_str_value(cf, &conf->header_name,
-                                                prev->header_name,
-                                                header_name)
+        || ngx_conf_merge_expr_str_value(cf, &conf->header_name,
+                                         prev->header_name,
+                                         header_name)
            != NGX_OK)
     {
         return NGX_CONF_ERROR;

@@ -22,23 +22,23 @@ http {
 ./configure --add-module=/path/to/ngx_http_auth_internal_module
 ```
 
-To enable `condition` and `when`, build `ngx_condition_module` statically in
+To enable `expr` and `when`, build `ngx_expr_module` statically in
 the same Nginx configuration:
 
 ```sh
 ./configure \
-    --add-module=/path/to/ngx_condition_module \
+    --add-module=/path/to/ngx_expr_module \
     --add-module=/path/to/ngx_http_auth_internal_module
 ```
 
 ## Conditional configuration
 
 All module directives support `http` and `server`. When
-[`ngx_condition_module`](https://git.hanada.info/hanada/ngx_condition_module)
+[`ngx_expr_module`](https://git.hanada.info/hanada/ngx_condition_module)
 is built into Nginx, they also support `when` in those contexts:
 
 ```nginx
-condition internal_auth_enabled str_eq $host internal.example.com;
+expr internal_auth_enabled str_eq $host internal.example.com;
 
 when internal_auth_enabled {
     auth_internal on;

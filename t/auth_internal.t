@@ -19,7 +19,7 @@ use Test::Nginx;
 select STDERR; $| = 1;
 select STDOUT; $| = 1;
 
-my $t = Test::Nginx->new()->has(qw/http rewrite ngx_condition_module
+my $t = Test::Nginx->new()->has(qw/http rewrite ngx_expr_module
 	ngx_http_auth_internal_module/)->plan(12);
 
 $t->write_file_expand('nginx.conf', <<'EOF');
@@ -69,8 +69,8 @@ http {
         listen       127.0.0.1:8080;
         server_name  conditional.local;
 
-        condition bypass str_eq $http_x_auth_mode bypass;
-        condition alternate str_eq $http_x_auth_mode alternate;
+        expr bypass str_eq $http_x_auth_mode bypass;
+        expr alternate str_eq $http_x_auth_mode alternate;
 
         when bypass {
             auth_internal off;
