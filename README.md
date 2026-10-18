@@ -49,10 +49,16 @@ when internal_auth_enabled {
 auth_internal off;
 ```
 
-Every directive selects its value independently. Multiple
-`auth_internal_secret` directives associated with the same `when` form one
-secret set. The first matching value is used, including unconditional values,
-so put an unconditional fallback after conditional values.
+Each single-value directive selects the first matching value independently,
+including unconditional values, so put its unconditional fallback after
+conditional values.
+
+`auth_internal_secret` instead checks all enabled secrets at the current level
+in declaration order. Unconditional secrets always participate. Secrets from
+the previous level are used only if no secret at the current level is enabled;
+a failed fingerprint check does not retry the previous level's secrets.
+Splitting declarations into separate blocks with the same condition does not
+change this behavior.
 
 ## Directives
 

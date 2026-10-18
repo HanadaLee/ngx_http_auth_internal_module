@@ -19,14 +19,25 @@ typedef struct {
 } ngx_http_auth_internal_ctx_t;
 
 
+#if (NGX_EXPR)
+typedef struct ngx_http_auth_internal_secrets_s
+    ngx_http_auth_internal_secrets_t;
+
+struct ngx_http_auth_internal_secrets_s {
+    ngx_array_t                        values;
+    ngx_http_auth_internal_secrets_t   *parent;
+};
+#endif
+
+
 typedef struct {
 #if (NGX_EXPR)
-    ngx_array_t   *enable;
-    ngx_array_t   *secrets;
-    ngx_array_t   *empty_deny;
-    ngx_array_t   *failure_deny;
-    ngx_array_t   *timeout;
-    ngx_array_t   *header_name;
+    ngx_array_t                      *enable;
+    ngx_http_auth_internal_secrets_t  *secrets;
+    ngx_array_t                      *empty_deny;
+    ngx_array_t                      *failure_deny;
+    ngx_array_t                      *timeout;
+    ngx_array_t                      *header_name;
 #else
     ngx_flag_t     enable;
     ngx_array_t   *secrets;
@@ -53,6 +64,13 @@ static char *ngx_http_auth_internal_merge_srv_conf(ngx_conf_t *cf,
     void *parent, void *child);
 static ngx_int_t ngx_http_auth_internal_init(ngx_conf_t *cf);
 
+#if (NGX_EXPR)
+static char *ngx_http_auth_internal_secret(ngx_conf_t *cf,
+    ngx_command_t *cmd, void *conf);
+static ngx_array_t *ngx_http_auth_internal_get_secrets(ngx_http_request_t *r,
+    ngx_http_auth_internal_secrets_t *secrets, ngx_uint_t *first);
+#endif
+
 
 static ngx_command_t  ngx_http_auth_internal_commands[] = {
 
@@ -78,7 +96,7 @@ static ngx_command_t  ngx_http_auth_internal_commands[] = {
 #endif
                         |NGX_CONF_TAKE1,
 #if (NGX_EXPR)
-      ngx_conf_set_conditional_str_array_slot,
+      ngx_http_auth_internal_secret,
 #else
       ngx_conf_set_str_array_slot,
 #endif
@@ -322,11 +340,16 @@ ngx_http_auth_internal_handler(ngx_http_request_t *r)
     time_t                             timestamp, current_time;
     time_t                             timeout;
     ngx_flag_t                         empty_deny, enable, failure_deny;
-    ngx_uint_t                         i;
+    ngx_uint_t                         i, first;
     ngx_str_t                          fingerprint, md5sum, computed_md5;
     ngx_str_t                          data;
     ngx_str_t                         *header_name;
     ngx_str_t                         *secret;
+#if (NGX_EXPR)
+    ngx_conf_expr_str_ctx_t            *values;
+#else
+    ngx_str_t                         *values;
+#endif
     ngx_array_t                       *secrets;
     ngx_table_elt_t                   *h;
     ngx_http_auth_internal_ctx_t      *ctx;
@@ -358,7 +381,7 @@ ngx_http_auth_internal_handler(ngx_http_request_t *r)
     }
 
 #if (NGX_EXPR)
-    secrets = ngx_http_get_expr_str_array_value(r, conf->secrets);
+    secrets = ngx_http_auth_internal_get_secrets(r, conf->secrets, &first);
     empty_deny =
         ngx_http_get_expr_flag_value(r, conf->empty_deny);
     failure_deny =
@@ -367,6 +390,7 @@ ngx_http_auth_internal_handler(ngx_http_request_t *r)
     header_name = ngx_http_get_expr_str_value(r, conf->header_name);
 #else
     secrets = conf->secrets;
+    first = 0;
     empty_deny = conf->empty_deny;
     failure_deny = conf->failure_deny;
     timeout = conf->timeout;
@@ -420,10 +444,23 @@ ngx_http_auth_internal_handler(ngx_http_request_t *r)
         return NGX_DECLINED;
     }
 
-    secret = secrets->elts;
+    values = secrets->elts;
 
-    for (i = 0; i < secrets->nelts; i++) {
-        data.len = secret[i].len + 8;
+    for (i = first; i < secrets->nelts; i++) {
+#if (NGX_EXPR)
+        if (i != first
+            && ngx_http_expr_get_result(r, values[i].expr_id)
+               != NGX_EXPR_WHEN_HIT)
+        {
+            continue;
+        }
+
+        secret = &values[i].value;
+#else
+        secret = &values[i];
+#endif
+
+        data.len = secret->len + 8;
         data.data = ngx_pnalloc(r->pool, data.len);
         if (data.data == NULL) {
             ctx->result = ngx_http_auth_internal_result_failure;
@@ -432,8 +469,8 @@ ngx_http_auth_internal_handler(ngx_http_request_t *r)
                 failure_deny);
         }
 
-        ngx_memcpy(data.data, secret[i].data, secret[i].len);
-        ngx_memcpy(data.data + secret[i].len, timestamp_hex, 8);
+        ngx_memcpy(data.data, secret->data, secret->len);
+        ngx_memcpy(data.data + secret->len, timestamp_hex, 8);
 
         computed_md5 = ngx_http_auth_internal_compute_md5_hex(r, data.data,
                                                               data.len);
@@ -498,11 +535,17 @@ ngx_http_auth_internal_merge_srv_conf(ngx_conf_t *cf, void *parent,
 #if (NGX_EXPR)
     ngx_str_t  header_name = ngx_string("X-Fingerprint");
 
+    if (conf->secrets == NGX_CONF_UNSET_PTR) {
+        ngx_conf_merge_ptr_value(conf->secrets, prev->secrets, NULL);
+
+    } else if (conf->secrets != NULL && conf->secrets != prev->secrets
+               && prev->secrets != NGX_CONF_UNSET_PTR)
+    {
+        conf->secrets->parent = prev->secrets;
+    }
+
     if (ngx_conf_merge_expr_flag_value(cf, &conf->enable, prev->enable, 0)
         != NGX_OK
-        || ngx_conf_merge_expr_ptr_value(cf, &conf->secrets,
-                                         prev->secrets, NULL)
-           != NGX_OK
         || ngx_conf_merge_expr_flag_value(cf, &conf->empty_deny,
                                           prev->empty_deny, 0)
            != NGX_OK
@@ -530,6 +573,71 @@ ngx_http_auth_internal_merge_srv_conf(ngx_conf_t *cf, void *parent,
 
     return NGX_CONF_OK;
 }
+
+
+#if (NGX_EXPR)
+
+static char *
+ngx_http_auth_internal_secret(ngx_conf_t *cf, ngx_command_t *cmd, void *conf)
+{
+    ngx_http_auth_internal_srv_conf_t  *scf = conf;
+
+    ngx_str_t                *value;
+    ngx_conf_expr_str_ctx_t   *secret;
+
+    if (scf->secrets == NGX_CONF_UNSET_PTR) {
+        scf->secrets = ngx_pcalloc(cf->pool,
+                                  sizeof(ngx_http_auth_internal_secrets_t));
+        if (scf->secrets == NULL) {
+            return NGX_CONF_ERROR;
+        }
+
+        if (ngx_array_init(&scf->secrets->values, cf->pool, 4,
+                           sizeof(ngx_conf_expr_str_ctx_t)) != NGX_OK)
+        {
+            return NGX_CONF_ERROR;
+        }
+    }
+
+    secret = ngx_array_push(&scf->secrets->values);
+    if (secret == NULL) {
+        return NGX_CONF_ERROR;
+    }
+
+    value = cf->args->elts;
+    secret->value = value[1];
+    secret->expr_id = ngx_expr_get_associated_when_id(cf);
+
+    return NGX_CONF_OK;
+}
+
+
+static ngx_array_t *
+ngx_http_auth_internal_get_secrets(ngx_http_request_t *r,
+    ngx_http_auth_internal_secrets_t *secrets, ngx_uint_t *first)
+{
+    ngx_uint_t                i;
+    ngx_conf_expr_str_ctx_t   *value;
+
+    *first = 0;
+
+    for ( /* void */; secrets; secrets = secrets->parent) {
+        value = secrets->values.elts;
+
+        for (i = 0; i < secrets->values.nelts; i++) {
+            if (ngx_http_expr_get_result(r, value[i].expr_id)
+                == NGX_EXPR_WHEN_HIT)
+            {
+                *first = i;
+                return &secrets->values;
+            }
+        }
+    }
+
+    return NULL;
+}
+
+#endif
 
 
 static ngx_int_t
